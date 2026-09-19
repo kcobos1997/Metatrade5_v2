@@ -1,0 +1,9 @@
+# Preserve exact bytes used by the frozen Phase 3 SHA-256 checks and manifest.
+# Existing CRLF endings are intentional; still check trailing spaces and tabs.
+/XAUUSD_Intraday_Signal_Scanner.mq5 -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+/XAUUSD_Intraday_Signal_Scanner.ex5 -text
+/tools/analyze_scanner.py -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+/tools/analyze_signal_outcomes.py -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+/tools/analyze_signal_robustness.py -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+/tools/validate_b0_pb1_holdout.py -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+/docs/research/B0_PB1_TEMPORAL_VALIDATION_PROTOCOL.md -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

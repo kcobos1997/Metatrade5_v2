@@ -266,3 +266,134 @@ códigos heredada de Windows; la batería completa posterior pasó. Los MQ5 y EX
 conservan sus hashes. Los resultados están ignorados, no se copió el CSV bruto al
 repositorio, no se prepararon archivos para commit y no se hizo commit ni push.
 No se ejecutó otro backtest ni se midió rentabilidad.
+
+## Cuaderno HTML autónomo — revisión de 50 señales
+
+`tools/render_signal_review.py` genera `signal_review_book.html` con HTML, CSS,
+JavaScript y SVG integrados. Usa Python 3.10+ y la biblioteca estándar; no instala
+paquetes. El HTML abre con doble clic, sin servidor ni conexión a internet. El
+navegador debe tener JavaScript habilitado. Las velas proceden del CSV original,
+no del CSV reducido ni de un servicio de precios.
+
+### Comando exacto para este experimento
+
+Desde la raíz del repositorio, usando el Python instalado en este equipo:
+
+```powershell
+& "$env:LOCALAPPDATA\Programs\Python\Python313\python.exe" -B tools\render_signal_review.py `
+  --input "$env:APPDATA\MetaQuotes\Tester\D0E8209F77C8CF37AD8BF550E51FF075\Agent-127.0.0.1-3000\MQL5\Files\XAUUSD_Scanner_B4C88ADF68090945.csv" `
+  --sample "artifacts\scanner_analysis\smoke_20260610_20260814_v2\signals_review_sample.csv" `
+  --output-dir "artifacts\scanner_analysis\smoke_20260610_20260814_v2_visual_review" `
+  --bars-before 30
+```
+
+En otro equipo puede sustituirse la ruta del intérprete por `python`. Las rutas
+relativas se resuelven desde la raíz del proyecto. Se usa un directorio hermano
+al de los CSV analizados para que repetir el analizador no encuentre archivos
+ajenos dentro de su destino. El HTML y las anotaciones son artefactos locales;
+no deben añadirse a Git.
+
+Abrir mediante doble clic en el explorador, o ejecutar:
+
+```powershell
+Start-Process -FilePath (Resolve-Path "artifacts\scanner_analysis\smoke_20260610_20260814_v2_visual_review\signal_review_book.html").Path
+```
+
+### Correspondencia y contexto causal
+
+- El identificador se muestra como `sample_id`. En la muestra actual se toma de
+  `signal_id`; no se modifica el CSV para renombrarlo.
+- La búsqueda principal usa `signal_open_server_text`; el epoch secundario usa
+  `bar_time_epoch` o el actual `signal_open_server`. Si aparecen ambos, ambos
+  deben coincidir con el texto. Se conserva el orden del archivo de muestra,
+  incluso si no fuera cronológico.
+- Se validan OHLC de la señal, dirección, módulo, aceptación original, H1 gate,
+  EMA H1, spread, hora NY y reason codes. No se recalculan señales.
+- El gráfico muestra exactamente las 30 posiciones M5 previas y la señal. Las
+  ventanas `m5_window` se reconstruyen secuencialmente solo con datos observados
+  hasta la decisión correspondiente. Una fila posterior no rellena huecos ni
+  cambia las velas de una ficha anterior. No se incluyen velas futuras.
+- Una franja azul identifica la señal; las velas alcistas son verdes huecas y
+  las bajistas rojas rellenas. Las mechas y cuerpos representan el OHLC a escala.
+  Pasar el cursor por una vela muestra su timestamp y OHLC.
+- Al inicio del archivo puede no haber 30 barras previas: se muestran las
+  disponibles, con advertencia `INCOMPLETE`, dejando vacías las posiciones
+  anteriores. No se inventan precios ni se buscan en internet.
+- Una barra de señal ausente, un hueco dentro del historial, OHLC contradictorios
+  o una discrepancia con la muestra generan una ficha `ERROR` visible y bloquean
+  ese gráfico. Las demás fichas siguen disponibles.
+- La fecha del servidor es la **apertura de la señal**. La fecha NY corresponde
+  a la **decisión**, como `decision_ny_text` en la muestra, y se etiqueta así;
+  no es la apertura de la vela. No se aplica la zona horaria del ordenador.
+
+Cada ficha muestra identificación, fechas, dirección, módulo, OHLC, spread en
+puntos, H1 gate, EMA y los cuatro reason codes. Los filtros son Todas, BUY, SELL,
+B0 exclusivo, PB1 exclusivo y B0+PB1. Anterior/Siguiente y el selector recorren
+el subconjunto filtrado conservando el orden de la muestra.
+
+### Anotaciones y descarga
+
+| Campo editable | Valores |
+| --- | --- |
+| chart_quality | Sin clasificar, CLEAR, MIXED, POOR |
+| signal_alignment | Sin clasificar, ALIGNED, UNCLEAR, MISALIGNED |
+| context_class | Sin clasificar, TREND, RANGE, TRANSITION, UNCLEAR |
+| reviewer_decision | PENDING, VALID, QUESTIONABLE, REJECTED |
+| reviewer_notes | Texto libre |
+
+Las anotaciones permanecen **solo en la pestaña abierta**. Cambiar de señal o
+filtro las conserva; recargar o cerrar puede perderlas. No se guardan en el HTML
+ni en el CSV de entrada. El aviso al salir depende del navegador: descargar
+siempre antes de cerrar.
+
+**Descargar anotaciones CSV** crea un archivo nuevo con nombre
+`signal_review_annotations_<fecha-hora>.csv`, en la carpeta de descargas elegida
+por el navegador. Exporta **todas las fichas**, no solo las visibles, en el orden
+de la muestra; incluye IDs, timestamps, dirección, módulo, estado, errores y los
+cinco campos de revisión. Nunca sobrescribe `signals_review_sample.csv`.
+
+El CSV descargado usa UTF-8 con BOM, CRLF y campos entre comillas; conserva comas,
+comillas, saltos de línea y acentos de las notas. Un apóstrofo protege textos que
+podrían interpretarse como fórmulas en una hoja de cálculo. Evitar escribir datos
+personales en las notas: no se auditan las ediciones realizadas en el navegador.
+
+El generador verifica los hashes de ambas entradas antes y después; publica
+únicamente el HTML mediante reemplazo de un archivo temporal. No incluye
+identidad de cuenta/servidor, Magic ni claves del scanner. Repetir el comando
+reemplaza el HTML generado; las descargas CSV ya guardadas son independientes.
+
+Códigos de salida del visor: **0** = generado sin errores de ficha (puede haber
+advertencias de historial inicial); **2** = validación fallida. Si el error es
+local a una señal, el HTML se genera con errores visibles y el proceso devuelve
+2. Un esquema original incompatible, checksum inválido u otro fallo global
+impide publicar un HTML nuevo y conserva el anterior. **3** = fallo de archivos.
+
+### Pruebas del visor y del analizador
+
+Este comando activa ambas integraciones reales y la prueba del navegador Edge
+instalado, sin ejecutar MT5 ni backtests:
+
+```powershell
+$env:SCANNER_CSV_PATH = "$env:APPDATA\MetaQuotes\Tester\D0E8209F77C8CF37AD8BF550E51FF075\Agent-127.0.0.1-3000\MQL5\Files\XAUUSD_Scanner_B4C88ADF68090945.csv"
+$env:SCANNER_SAMPLE_PATH = (Resolve-Path "artifacts\scanner_analysis\smoke_20260610_20260814_v2\signals_review_sample.csv").Path
+$env:REVIEW_BROWSER_EXE = "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe"
+& "$env:LOCALAPPDATA\Programs\Python\Python313\python.exe" -B -m unittest discover -s tests -p "test_*.py" -v
+```
+
+Sin las variables de datos, las integraciones reales se omiten. La prueba de
+interacción/descarga ejecuta Edge o Chromium ya instalado en modo headless
+(sin ventana), con perfil temporal. Si no encuentra navegador, se omite; no lo
+descarga. Los demás tests no necesitan navegador.
+
+Se prueban timestamps y alias, rechazo de discrepancias OHLC/dirección/módulo,
+31 velas exactas y señal única, ausencia de velas futuras, historial inicial
+corto, huecos, contradicciones, orden determinista, escape HTML/JSON, controles y
+exportación CSV, conservación de entradas y generación de las 50 fichas reales.
+
+Verificación local del visor (2026-09-18): **64 tests OK, sin omisiones** (42 del
+analizador y 22 del visor), incluidas ambas integraciones reales y la interacción
+con Edge. Informe generado con **50 fichas OK**, **31 velas por ficha**, cero
+errores y cero advertencias de historial insuficiente. Se comprobó también la
+presentación del HTML en Edge. Los hashes de original y muestra no cambiaron;
+MQ5 y EX5 conservaron sus hashes. No se ejecutaron backtests ni acciones de Git
+que modificaran el índice, commits o el remoto.
